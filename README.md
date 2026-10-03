@@ -4,11 +4,17 @@
 
 ## 起動方法
 
+### PC（ローカル）
+
 1. `起動.bat` をダブルクリックします（Python 3 が必要です）。
 2. ブラウザ（Chrome または Edge）で `http://localhost:8787/` が開きます。
 3. 黒いコマンド画面を閉じると停止します。
 
-ブラウザの localStorage にデータを保存するため、同じ PC・同じブラウザで開けば前回の内容が残ります。
+### スマホ・どこからでも（公開版）
+
+<https://logiaxis-yanagida.github.io/taskapp/> を開きます。iPhone は Safari の共有ボタンから「ホーム画面に追加」するとアプリとして使えます。
+
+タスクデータは端末内（localStorage）に保存され、Google にサインインすると Google ドライブ経由で PC・スマホ間で自動同期されます。
 
 ## 使い方
 
