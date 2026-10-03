@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>タスク</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#2563eb">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111318">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="タスク">
+  <script type="module" src="./js/pwa.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1 class="app-title">タスク</h1>
+      <button type="button" class="icon-btn" id="settings-btn" aria-label="設定" title="設定">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.5a7.9 7.9 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a8 8 0 0 0-1.7-1L15 3H9l-.4 2.7a8 8 0 0 0-1.7 1l-2.5-1-2 3.5L4.6 11a7.9 7.9 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a8 8 0 0 0 1.7 1L9 21h6l.4-2.7a8 8 0 0 0 1.7-1l2.5 1 2-3.5Z"/></svg>
+      </button>
+    </header>
+
+    <section class="composer" aria-label="タスク入力">
+      <form class="input-bar" id="task-form" autocomplete="off">
+        <input type="text" id="task-input" class="task-input" placeholder="例: 明日までに請求書送付 優先度高" aria-label="タスク" enterkeyhint="done">
+        <button type="button" class="mic-btn" id="mic-btn" aria-label="音声入力" title="音声入力" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11Z"/></svg>
+        </button>
+        <button type="submit" class="add-btn" id="add-btn" aria-label="追加" title="追加">追加</button>
+      </form>
+      <div class="chips" id="chips" role="group" aria-label="タスクの属性">
+        <button type="button" class="chip" data-chip="due" aria-haspopup="dialog">期限なし</button>
+        <button type="button" class="chip" data-chip="time" aria-haspopup="dialog">時刻なし</button>
+        <button type="button" class="chip" data-chip="priority" aria-haspopup="dialog">中</button>
+        <button type="button" class="chip" data-chip="category" aria-haspopup="dialog">カテゴリなし</button>
+        <button type="button" class="chip" data-chip="repeat" aria-haspopup="dialog">繰り返しなし</button>
+      </div>
+      <p class="voice-status" id="voice-status" aria-live="polite" hidden></p>
+    </section>
+
+    <nav class="tabs" aria-label="フィルタ">
+      <button type="button" class="tab is-active" data-filter="today" aria-pressed="true">今日</button>
+      <button type="button" class="tab" data-filter="upcoming" aria-pressed="false">予定</button>
+      <button type="button" class="tab" data-filter="all" aria-pressed="false">すべて</button>
+      <button type="button" class="tab" data-filter="done" aria-pressed="false">完了</button>
+    </nav>
+
+    <main class="task-area">
+      <div id="task-list"></div>
+      <p class="empty" id="empty" hidden>マイクを押して話すか、入力してください</p>
+    </main>
+  </div>
+
+  <div class="popover" id="popover" role="dialog" aria-modal="false" hidden></div>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <dialog class="settings" id="settings-dialog" aria-labelledby="settings-title">
+    <form method="dialog" class="settings-form">
+      <header class="settings-header">
+        <h2 id="settings-title">設定</h2>
+        <button type="submit" class="icon-btn" aria-label="閉じる" title="閉じる">×</button>
+      </header>
+
+      <section class="settings-section">
+        <h3>カテゴリ</h3>
+        <ul class="category-list" id="category-list"></ul>
+        <button type="button" class="btn" id="add-category-btn">カテゴリを追加</button>
+        <label class="field">
+          <span>既定のカテゴリ</span>
+          <select id="default-category"></select>
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h3>Googleカレンダー</h3>
+        <label class="field">
+          <span>OAuth クライアントID</span>
+          <input type="text" id="gcal-client-id" placeholder="xxxx.apps.googleusercontent.com" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>カレンダーID</span>
+          <input type="text" id="gcal-calendar-id" placeholder="primary" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>期限付きタスクのカレンダー登録</span>
+          <select id="gcal-sync-mode">
+            <option value="confirm">登録後に確認する（追加ボタンを押したときだけ登録）</option>
+            <option value="auto">自動で登録する</option>
+            <option value="manual">手動（タスク行のカレンダーボタンで登録）</option>
+          </select>
+        </label>
+        <div class="btn-row">
+          <button type="button" class="btn" id="gcal-signin-btn">サインイン</button>
+          <button type="button" class="btn" id="gcal-sync-all-btn">未同期のタスクをまとめて同期</button>
+        </div>
+        <p class="hint" id="gcal-status"></p>
+        <p class="hint"><a href="docs/Googleカレンダー連携_設定手順.md" target="_blank" rel="noopener">設定手順を見る</a></p>
+        <div class="btn-row">
+          <button type="button" class="btn" id="drive-sync-now">今すぐ同期（Googleドライブ）</button>
+        </div>
+        <p class="hint" id="drive-status" aria-live="polite"></p>
+      </section>
+
+      <section class="settings-section">
+        <h3>音声入力</h3>
+        <label class="toggle">
+          <input type="checkbox" id="voice-auto-add">
+          <span>音声の認識結果で自動登録する</span>
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h3>データ</h3>
+        <div class="btn-row">
+          <button type="button" class="btn" id="export-btn">JSONエクスポート</button>
+          <button type="button" class="btn" id="import-btn">JSONインポート</button>
+        </div>
+        <fieldset class="radio-row">
+          <legend>インポート方法</legend>
+          <label><input type="radio" name="import-mode" value="replace" checked> 置換</label>
+          <label><input type="radio" name="import-mode" value="merge"> 統合</label>
+        </fieldset>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+      </section>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite" popover="manual"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
