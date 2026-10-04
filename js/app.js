@@ -57,6 +57,7 @@ const ui = {
   editingId: null,
   recognizer: null,
   listening: false,
+  micGranted: false,
   lastSyncErrorToast: '',
 };
 
@@ -806,11 +807,36 @@ function setListening(on) {
   el.voiceStatus.textContent = on ? '聞き取り中です。話し終わると自動で止まります' : '';
 }
 
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+async function ensureMicPermission() {
+  if (ui.micGranted || !navigator.mediaDevices?.getUserMedia) return;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  stream.getTracks().forEach((t) => t.stop());
+  ui.micGranted = true;
+}
+
+function showKeyboardDictationHint() {
+  el.input.focus();
+  showToast('このブラウザでは音声認識を開始できませんでした。入力欄をタップし、キーボードのマイクボタンで話すと同じように登録できます', {
+    error: true,
+    duration: 12000,
+  });
+}
+
 function startVoice() {
   if (ui.listening && ui.recognizer) {
     ui.recognizer.stop();
     return;
   }
+  if (IS_IOS && !ui.micGranted) {
+    ensureMicPermission().then(beginRecognition).catch(() => showKeyboardDictationHint());
+    return;
+  }
+  beginRecognition();
+}
+
+function beginRecognition() {
   ui.recognizer = createRecognizer({
     lang: 'ja-JP',
     onResult: (text, isFinal) => {
@@ -829,12 +855,8 @@ function startVoice() {
     },
     onError: (code, message) => {
       setListening(false);
-      const isIos = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      if (isIos && (code === 'not-allowed' || code === 'service-not-allowed')) {
-        showToast(
-          'マイクを使えません。iPhoneの「設定 → 一般 → キーボード → 音声入力」をオンにし、Safariのアドレスバー左の「ぁあ」→「Webサイトの設定」→「マイク」を「許可」にしてから再読み込みしてください',
-          { error: true, duration: 15000 },
-        );
+      if (IS_IOS && (code === 'not-allowed' || code === 'service-not-allowed' || code === 'not-supported')) {
+        showKeyboardDictationHint();
         return;
       }
       showToast(message || `音声入力エラー（${code}）`, { error: true });
