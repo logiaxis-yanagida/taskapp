@@ -40,10 +40,53 @@ function nowISO() {
 function defaultCategories() {
   const now = nowISO();
   return [
-    { id: uuid(), name: '仕事', color: '#2563eb', updatedAt: now },
-    { id: uuid(), name: 'LOGIAXIS', color: '#7c3aed', updatedAt: now },
-    { id: uuid(), name: '私用', color: '#16a34a', updatedAt: now },
+    { id: 'cat-work', name: '仕事', color: '#2563eb', updatedAt: now },
+    { id: 'cat-logiaxis', name: 'LOGIAXIS', color: '#7c3aed', updatedAt: now },
+    { id: 'cat-private', name: '私用', color: '#16a34a', updatedAt: now },
   ];
+}
+
+function categoryKey(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
+function dedupeCategories(categories, tasks, deleted) {
+  const groups = new Map();
+  for (const c of categories) {
+    const key = categoryKey(c.name);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+  const refCount = new Map();
+  for (const t of tasks) {
+    if (t.categoryId) refCount.set(t.categoryId, (refCount.get(t.categoryId) || 0) + 1);
+  }
+  const remap = new Map();
+  const kept = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      kept.push(group[0]);
+      continue;
+    }
+    const sorted = [...group].sort((a, b) => {
+      const ra = refCount.get(a.id) || 0;
+      const rb = refCount.get(b.id) || 0;
+      if (ra !== rb) return rb - ra;
+      if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? -1 : 1;
+      return a.id < b.id ? -1 : 1;
+    });
+    const keeper = sorted[0];
+    kept.push(keeper);
+    for (const dup of sorted.slice(1)) remap.set(dup.id, keeper.id);
+  }
+  if (remap.size === 0) return { categories, tasks, deleted, changed: false };
+  const now = nowISO();
+  const nextTasks = tasks.map((t) =>
+    t.categoryId && remap.has(t.categoryId) ? { ...t, categoryId: remap.get(t.categoryId), updatedAt: now } : t,
+  );
+  const nextDeleted = { ...deleted };
+  for (const id of remap.keys()) nextDeleted[id] = now;
+  return { categories: kept, tasks: nextTasks, deleted: nextDeleted, changed: true, remap };
 }
 
 function defaultSettings() {
@@ -143,7 +186,9 @@ function normalizeState(raw) {
     settings.gcalSyncMode = settings.gcalAutoSync === false ? 'manual' : 'confirm';
   }
   delete settings.gcalAutoSync;
-  return { version: 1, tasks, categories, settings, deleted: pruneDeleted(normalizeDeleted(raw.deleted)) };
+  const dd = dedupeCategories(categories, tasks, pruneDeleted(normalizeDeleted(raw.deleted)));
+  if (dd.remap && dd.remap.has(settings.defaultCategoryId)) settings.defaultCategoryId = dd.remap.get(settings.defaultCategoryId);
+  return { version: 1, tasks: dd.tasks, categories: dd.categories, settings, deleted: dd.deleted };
 }
 
 function load() {
@@ -414,13 +459,18 @@ export const store = {
       : [];
     const deleted = pruneDeleted(mergeDeletedMaps(state.deleted, normalizeDeleted(remote.deleted)));
 
-    const categories = mergeCollection(state.categories, remoteCategories, deleted);
-    const categoryIds = new Set(categories.map((c) => c.id));
-    const tasks = mergeCollection(state.tasks, remoteTasks, deleted)
-      .map((t) => (t.categoryId && !categoryIds.has(t.categoryId) ? { ...t, categoryId: null } : t));
-    for (const item of [...categories, ...tasks]) {
+    const mergedCategories = mergeCollection(state.categories, remoteCategories, deleted);
+    const mergedCategoryIds = new Set(mergedCategories.map((c) => c.id));
+    const mergedTasks = mergeCollection(state.tasks, remoteTasks, deleted)
+      .map((t) => (t.categoryId && !mergedCategoryIds.has(t.categoryId) ? { ...t, categoryId: null } : t));
+    for (const item of [...mergedCategories, ...mergedTasks]) {
       if (deleted[item.id]) delete deleted[item.id];
     }
+    const dd = dedupeCategories(mergedCategories, mergedTasks, deleted);
+    const categories = dd.categories;
+    const tasks = dd.tasks;
+    Object.assign(deleted, dd.deleted);
+    const categoryIds = new Set(categories.map((c) => c.id));
 
     const changed =
       JSON.stringify(categories) !== JSON.stringify(state.categories)

@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.3';
+const VERSION = 'v1.0.4';
 const CACHE_NAME = `taskapp-${VERSION}`;
 
 const PRECACHE_URLS = [

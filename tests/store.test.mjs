@@ -280,3 +280,46 @@ describe('deleted の維持と掃除', () => {
     assert.equal(store.getState().deleted.recent, recentAt);
   });
 });
+
+describe('同名カテゴリの統合', () => {
+  test('importJSON で同名カテゴリが1つにまとまり、タスクの参照も付け替わる', () => {
+    store.importJSON(
+      {
+        version: 1,
+        categories: [
+          { id: 'x1', name: '仕事', color: '#2563eb', updatedAt: BASE_AT },
+          { id: 'x2', name: '仕事', color: '#2563eb', updatedAt: '2026-02-01T00:00:00.000Z' },
+          { id: 'x3', name: '私用', color: '#16a34a', updatedAt: BASE_AT },
+        ],
+        tasks: [task('t1', { categoryId: 'x2' })],
+      },
+      { merge: false },
+    );
+    const cats = store.getCategories();
+    assert.equal(cats.filter((c) => c.name === '仕事').length, 1);
+    assert.equal(cats.find((c) => c.name === '仕事').id, 'x2');
+    assert.equal(store.getTasks()[0].categoryId, 'x2');
+    assert.ok(store.getSyncPayload().deleted.x1);
+  });
+
+  test('mergeRemote で別IDの同名カテゴリが来ても重複しない', () => {
+    store.importJSON(
+      {
+        version: 1,
+        categories: [{ id: 'l1', name: 'LOGIAXIS', color: '#7c3aed', updatedAt: BASE_AT }],
+        tasks: [task('t1', { categoryId: 'l1' })],
+      },
+      { merge: false },
+    );
+    store.mergeRemote({
+      version: 1,
+      categories: [{ id: 'r1', name: 'LOGIAXIS', color: '#7c3aed', updatedAt: BASE_AT }],
+      tasks: [],
+      deleted: {},
+    });
+    const cats = store.getCategories().filter((c) => c.name === 'LOGIAXIS');
+    assert.equal(cats.length, 1);
+    assert.equal(cats[0].id, 'l1');
+    assert.equal(store.getTasks()[0].categoryId, 'l1');
+  });
+});
