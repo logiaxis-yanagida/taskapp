@@ -829,6 +829,14 @@ function startVoice() {
     },
     onError: (code, message) => {
       setListening(false);
+      const isIos = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIos && (code === 'not-allowed' || code === 'service-not-allowed')) {
+        showToast(
+          'マイクを使えません。iPhoneの「設定 → 一般 → キーボード → 音声入力」をオンにし、Safariのアドレスバー左の「ぁあ」→「Webサイトの設定」→「マイク」を「許可」にしてから再読み込みしてください',
+          { error: true, duration: 15000 },
+        );
+        return;
+      }
       showToast(message || `音声入力エラー（${code}）`, { error: true });
     },
   });

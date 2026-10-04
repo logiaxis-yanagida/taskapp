@@ -1,4 +1,5 @@
 import { addDays, addMonths, todayYMD } from './dateutil.js';
+import { DEFAULT_GCAL_CLIENT_ID, DEFAULT_GCAL_CALENDAR_ID } from './config.js';
 
 const STORAGE_KEY = 'taskapp.v1';
 const PRIORITIES = ['high', 'mid', 'low'];
@@ -47,7 +48,7 @@ function defaultCategories() {
 
 function defaultSettings() {
   return {
-    gcalClientId: '',
+    gcalClientId: DEFAULT_GCAL_CLIENT_ID,
     gcalCalendarId: 'primary',
     gcalSyncMode: 'confirm',
     voiceAutoAdd: true,
@@ -132,6 +133,12 @@ function normalizeState(raw) {
     : [];
   const settings = { ...base.settings, ...(raw.settings && typeof raw.settings === 'object' ? raw.settings : {}) };
   if (!categoryIds.has(settings.defaultCategoryId)) settings.defaultCategoryId = null;
+  if (typeof settings.gcalClientId !== 'string' || !settings.gcalClientId.trim()) {
+    settings.gcalClientId = DEFAULT_GCAL_CLIENT_ID;
+  }
+  if (typeof settings.gcalCalendarId !== 'string' || !settings.gcalCalendarId.trim()) {
+    settings.gcalCalendarId = DEFAULT_GCAL_CALENDAR_ID;
+  }
   if (!['auto', 'confirm', 'manual'].includes(settings.gcalSyncMode)) {
     settings.gcalSyncMode = settings.gcalAutoSync === false ? 'manual' : 'confirm';
   }
