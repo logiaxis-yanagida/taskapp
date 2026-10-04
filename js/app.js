@@ -830,7 +830,19 @@ function startVoice() {
     return;
   }
   if (IS_IOS && !ui.micGranted) {
-    ensureMicPermission().then(beginRecognition).catch(() => showKeyboardDictationHint());
+    ensureMicPermission()
+      .then(beginRecognition)
+      .catch((err) => {
+        if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+          showToast(
+            'Safariのマイクが拒否されています。アドレスバー左の「ぁあ」→「Webサイトの設定」→「マイク」を「許可」にし、iPhoneの「設定 → アプリ → Safari → マイク」も「確認」か「許可」にして再読み込みしてください。代わりにキーボードのマイクボタンでも入力できます',
+            { error: true, duration: 15000 },
+          );
+          el.input.focus();
+          return;
+        }
+        showKeyboardDictationHint();
+      });
     return;
   }
   beginRecognition();
