@@ -41,6 +41,7 @@ type Repeat   = 'none' | 'daily' | 'weekly' | 'monthly';
 interface Task {
   id: string;             // crypto.randomUUID()
   title: string;
+  memo: string;           // 既定 ''。前後の空白を除去し改行は保持。タスク行のタイトル下に小さく表示（議事録アプリからの取り込みでは元会議名・担当）
   due: string | null;     // 'YYYY-MM-DD'（ローカル日付）。null=期限なし
   time: string | null;    // 'HH:MM'（24時間）。null=時刻なし（終日）。時刻あり＋期限なしの登録時は due=今日
   priority: Priority;     // 既定 'mid'
@@ -88,7 +89,7 @@ export function formatDueLabel(ymd, today)
 ```js
 export const store = {
   getState(), getTasks(), getCategories(), getSettings(),
-  addTask(partial),            // { title 必須, due, priority, categoryId, repeat } → Task
+  addTask(partial),            // { title 必須, memo, due, priority, categoryId, repeat } → Task
   updateTask(id, patch),       // → Task | null
   deleteTask(id),
   toggleDone(id),              // → { task, next }
@@ -220,8 +221,10 @@ export const drive = {
   - Drive API v3（`files?spaces=appDataFolder&q=name='taskapp-state.json'`、`files/{id}?alt=media`、`upload/drive/v3/files`）。通信はすべて gcal.js の `authorizedFetch(method, url, body, okStatuses, { contentType })` を使い、401 の扱い（トークン破棄・silent 再サインイン）は gcal.js に任せる。
 - js/sync.js:
 ```js
-export function createSync({ store, gcal, drive, onStatus })
+export function createSync({ store, gcal, drive, onStatus, afterPull })
   // → { start(), pullNow(), pushNow(), getStatus() }
+  // afterPull: 任意の async 関数。pull → mergeRemote の直後、push 判定の前に呼ぶ（議事録 Drive inbox の取り込みに使用）。
+  //   その間の store 変更はデバウンス対象外で、同じ実行の push に含まれる。例外は console.error のみで同期は続行
   // status: { state: 'idle' | 'syncing' | 'synced' | 'error' | 'signed-out', lastSyncedAt: ISO | null, message }
 ```
   - `gcal.isSignedIn()` のときのみ動く。start 時・onAuthChange(true)・タブが visible になった時（前回 pull から 30 秒以上）に「pull → mergeRemote → ローカルが remote と異なれば push」。
@@ -242,3 +245,20 @@ export function createSync({ store, gcal, drive, onStatus })
   - app.js では `configureGcal()` の直後に try/catch で呼び、成功時は「サインインしました」トーストを出し、その後 `sync.start()` を呼ぶ。
 - `export const authorizedFetch = apiFetch`（drive.js から利用）。`authorizedFetch(method, url, body, okStatuses = [], { contentType, headers } = {})`。body が文字列ならそのまま送信（Content-Type は contentType）、オブジェクトなら JSON。
 - Google Cloud 側: OAuth クライアント（ウェブ アプリケーション）の **「承認済みのリダイレクト URI」** に、アプリを開く URL のオリジン＋パス（例: `http://localhost:8787/`、`https://<ホスト>/<パス>/`。末尾の `/` まで一致させる。クエリ・ハッシュなし）を追加する。「承認済みの JavaScript 生成元」は従来どおりオリジンを登録する。
+
+## 議事録アプリからのタスク取り込み（js/inbox.js）
+- 議事録アプリ（`../5.議事録`）がタスクを2経路で書き込み、taskapp が取り込む。
+  - 端末内: localStorage `minutes.taskappInbox` に `InboxItem[]`
+  - Drive: appDataFolder のファイル `taskapp-inbox-<id>.json`（1ファイル1件）
+  - `InboxItem { id, title, due: YMD|null, memo, categoryId: string|null, source: 'minutes', meetingId, createdAt }`
+```js
+export const LOCAL_INBOX_KEY = 'minutes.taskappInbox';
+export function importLocalInbox(store, storage = localStorage)  // → 取り込み件数
+export async function importDriveInbox(store, apiFetch)          // → 取り込み件数（apiFetch は gcal.js の authorizedFetch）
+```
+- 取り込み: id・title が空でない項目のうち、`store.getTasks()` に同じ id が無く、`deleted` にトゥームストーンも無いものだけを `store.importJSON({ version: 1, tasks, categories: store.getCategories() }, { merge: true })` で追加（taskapp で削除済みのタスクは復活させない）。Task は `time=null, priority='mid', repeat='none', done=false`、`categoryId` は存在するカテゴリのみ（無ければ null）、`createdAt` は InboxItem の値、`updatedAt` は現在時刻。
+- 端末内: 処理後にキーを読み直し、処理済み id を除いて残りがあれば書き戻し、無ければキーを削除。
+- Drive: `files?spaces=appDataFolder&q=name contains 'taskapp-inbox-'&fields=files(id,name)` で列挙 → `files/{id}?alt=media` で取得 → 取り込み → `DELETE files/{id}`（404 は無視）。取り込み済み・削除済みでもファイルは削除する。
+- 呼び出し（app.js）: 起動時（store.subscribe 後、sync.start 前）、`visibilitychange`（visible）、`storage` イベント（キー一致時）で端末内を取り込む。Drive 分は `createSync` の `afterPull` で同期のたびに取り込む（pull 後なので他端末で削除済みのトゥームストーンも反映済み）。
+- 取り込み件数が 1 以上なら「議事録から N 件のタスクを取り込みました」をトースト表示。取り込んだタスクのカレンダー登録確認は出さない。
+- タスク行: memo があればタイトル下に表示（タップで編集ポップオーバー）。memo が無ければメタ行の「メモ」ボタンから追加。ポップオーバーは textarea ＋「保存」（Ctrl/Cmd+Enter でも保存）。

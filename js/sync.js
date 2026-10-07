@@ -22,7 +22,7 @@ function isOffline() {
   return typeof globalThis.navigator !== 'undefined' && globalThis.navigator.onLine === false;
 }
 
-export function createSync({ store, gcal, drive, onStatus }) {
+export function createSync({ store, gcal, drive, onStatus, afterPull }) {
   let status = { state: gcal.isSignedIn() ? 'idle' : 'signed-out', lastSyncedAt: null, message: '' };
   let applyingRemote = false;
   let inFlight = null;
@@ -62,6 +62,16 @@ export function createSync({ store, gcal, drive, onStatus }) {
         applyingRemote = true;
         try {
           store.mergeRemote(remote.state);
+        } finally {
+          applyingRemote = false;
+        }
+      }
+      if (typeof afterPull === 'function') {
+        applyingRemote = true;
+        try {
+          await afterPull();
+        } catch (e) {
+          console.error(e);
         } finally {
           applyingRemote = false;
         }

@@ -9,9 +9,10 @@ import {
 } from './dateutil.js';
 import { parseTaskText } from './parser.js';
 import { isVoiceSupported, createRecognizer } from './voice.js';
-import { gcal } from './gcal.js';
+import { gcal, authorizedFetch } from './gcal.js';
 import { drive } from './drive.js';
 import { createSync } from './sync.js';
+import { importLocalInbox, importDriveInbox, LOCAL_INBOX_KEY } from './inbox.js';
 
 const PRIORITY_LABEL = { high: '高', mid: '中', low: '低' };
 const PRIORITY_ORDER = { high: 0, mid: 1, low: 2 };
@@ -469,6 +470,37 @@ function openRepeatPopover(anchor, current, onPick) {
   });
 }
 
+function openMemoPopover(anchor, task) {
+  let textarea = null;
+  openPopover(anchor, 'メモ', (root) => {
+    textarea = document.createElement('textarea');
+    textarea.className = 'memo-edit';
+    textarea.rows = 4;
+    textarea.value = task.memo || '';
+    textarea.setAttribute('aria-label', 'メモを編集');
+    const save = () => {
+      closePopover();
+      if (textarea.value.trim() !== (task.memo || '')) store.updateTask(task.id, { memo: textarea.value });
+    };
+    textarea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        save();
+      }
+    });
+    const row = document.createElement('div');
+    row.className = 'btn-row';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn primary';
+    btn.textContent = '保存';
+    btn.addEventListener('click', save);
+    row.append(btn);
+    root.append(textarea, row);
+  });
+  textarea.focus({ preventScroll: true });
+}
+
 function onChipClick(e) {
   const chip = e.target.closest('.chip');
   if (!chip) return;
@@ -621,6 +653,16 @@ function renderTask(task, t, editingValue = null) {
     main.append(title);
   }
 
+  if (task.memo) {
+    const memo = document.createElement('button');
+    memo.type = 'button';
+    memo.className = 'memo';
+    memo.textContent = task.memo;
+    memo.setAttribute('aria-label', `メモ: ${task.memo}`);
+    memo.addEventListener('click', () => openMemoPopover(memo, task));
+    main.append(memo);
+  }
+
   const meta = document.createElement('div');
   meta.className = 'meta';
 
@@ -670,6 +712,16 @@ function renderTask(task, t, editingValue = null) {
   rep.setAttribute('aria-label', `繰り返し: ${task.repeat === 'none' ? 'なし' : REPEAT_LABEL[task.repeat]}`);
   rep.addEventListener('click', () => openRepeatPopover(rep, task.repeat, (v) => updateTaskAndSync(task.id, { repeat: v })));
   meta.append(rep);
+
+  if (!task.memo) {
+    const memoBtn = document.createElement('button');
+    memoBtn.type = 'button';
+    memoBtn.className = 'meta-btn memo-add';
+    memoBtn.textContent = 'メモ';
+    memoBtn.setAttribute('aria-label', 'メモを追加');
+    memoBtn.addEventListener('click', () => openMemoPopover(memoBtn, task));
+    meta.append(memoBtn);
+  }
 
   main.append(meta);
 
@@ -1169,8 +1221,30 @@ function bindEvents() {
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') render();
+    if (document.visibilityState !== 'visible') return;
+    render();
+    runLocalInbox();
   });
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === LOCAL_INBOX_KEY && e.newValue) runLocalInbox();
+  });
+}
+
+function notifyImported(count) {
+  if (count > 0) showToast(`議事録から ${count} 件のタスクを取り込みました`);
+}
+
+function runLocalInbox() {
+  try {
+    notifyImported(importLocalInbox(store));
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function runDriveInbox() {
+  notifyImported(await importDriveInbox(store, authorizedFetch));
 }
 
 function init() {
@@ -1204,7 +1278,8 @@ function init() {
   bindEvents();
   renderChips();
   setFilter('today');
-  sync = createSync({ store, gcal, drive, onStatus: onSyncStatus });
+  runLocalInbox();
+  sync = createSync({ store, gcal, drive, onStatus: onSyncStatus, afterPull: runDriveInbox });
   sync.start();
   renderDriveStatus();
 }

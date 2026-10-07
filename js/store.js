@@ -122,6 +122,7 @@ function normalizeTask(raw, categoryIds) {
   return {
     id: typeof raw.id === 'string' && raw.id ? raw.id : uuid(),
     title: raw.title,
+    memo: typeof raw.memo === 'string' ? raw.memo.trim() : '',
     due: isYMD(raw.due) ? raw.due : null,
     time: isHM(raw.time) ? raw.time : null,
     priority: PRIORITIES.includes(raw.priority) ? raw.priority : 'mid',
@@ -285,6 +286,7 @@ export const store = {
       {
         id: uuid(),
         title,
+        memo: partial.memo ?? '',
         due: partial.due ?? null,
         time: partial.time ?? null,
         priority: partial.priority ?? 'mid',

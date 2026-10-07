@@ -386,6 +386,43 @@ a {
   outline: none;
 }
 
+.memo {
+  display: block;
+  width: 100%;
+  padding: 0 6px 2px;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memo:hover,
+.memo:focus-visible {
+  background: var(--surface-2);
+}
+
+.memo-edit {
+  display: block;
+  width: calc(100% - 12px);
+  min-width: 280px;
+  margin: 0 6px;
+  padding: 8px 10px;
+  font: inherit;
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  resize: vertical;
+}
+
+.popover .btn-row {
+  justify-content: flex-end;
+  margin: 8px 6px 4px;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;

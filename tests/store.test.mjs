@@ -323,3 +323,32 @@ describe('同名カテゴリの統合', () => {
     assert.equal(store.getTasks()[0].categoryId, 'l1');
   });
 });
+
+describe('memo', () => {
+  beforeEach(() => reset());
+
+  test('addTask は memo を既定で空文字にし、指定時は前後の空白を除いて改行を残す', () => {
+    assert.equal(store.addTask({ title: 'A' }).memo, '');
+    assert.equal(store.addTask({ title: 'B', memo: '  元会議：定例\n担当：田中  ' }).memo, '元会議：定例\n担当：田中');
+  });
+
+  test('updateTask で memo を変更できる', () => {
+    const t = store.addTask({ title: 'A' });
+    assert.equal(store.updateTask(t.id, { memo: ' メモ ' }).memo, 'メモ');
+    assert.equal(store.updateTask(t.id, { memo: '' }).memo, '');
+  });
+
+  test('文字列以外の memo は空文字になる', () => {
+    reset({ tasks: [task('m1', { memo: 123 }), task('m2')] });
+    assert.equal(findTask('m1').memo, '');
+    assert.equal(findTask('m2').memo, '');
+  });
+
+  test('mergeRemote と importJSON（統合）で memo が保持される', () => {
+    reset({ tasks: [task('m1')] });
+    store.mergeRemote({ tasks: [task('m1', { memo: 'リモート', updatedAt: iso(1000) })], categories: [], deleted: {} });
+    assert.equal(findTask('m1').memo, 'リモート');
+    store.importJSON({ version: 1, tasks: [task('m2', { memo: '取込' })], categories: [] }, { merge: true });
+    assert.equal(findTask('m2').memo, '取込');
+  });
+});
