@@ -2,7 +2,7 @@ import { addDays } from './dateutil.js';
 
 const TOKEN_KEY = 'taskapp.gcal.token';
 const STATE_KEY = 'taskapp.gcal.state';
-const SCOPE = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.appdata';
+const SCOPE = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 const OAUTH_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const API_BASE = 'https://www.googleapis.com/calendar/v3/calendars/';

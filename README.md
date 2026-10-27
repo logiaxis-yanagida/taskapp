@@ -79,6 +79,7 @@ js/gcal.js          Google カレンダー API
 js/drive.js         Google ドライブ保存
 js/sync.js          ドライブ同期
 js/inbox.js         議事録アプリからのタスク取り込み
+js/bridge.js        ショートカット連携用ファイルの書き出し（マイドライブ/taskapp-bridge）
 js/dateutil.js      日付ユーティリティ
 tests/              node --test で実行する単体テスト
 docs/               設定手順

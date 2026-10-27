@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.5';
+const VERSION = 'v1.0.6';
 const CACHE_NAME = `taskapp-${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -16,6 +16,7 @@ const PRECACHE_URLS = [
   './js/sync.js',
   './js/config.js',
   './js/inbox.js',
+  './js/bridge.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',

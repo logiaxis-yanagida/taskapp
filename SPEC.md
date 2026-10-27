@@ -196,7 +196,7 @@ export const gcal = {
 ## ドライブ同期（js/drive.js, js/sync.js, store.js 拡張）
 - 目的: サインインした Google アカウントの **Drive appDataFolder** にタスクデータを保存し、PC とスマホ（ホーム画面アプリ）でタスクを共有する。設定（settings）は端末ローカルで同期しない。
 - 保存先: appDataFolder 内の単一ファイル `taskapp-state.json`。内容は `store.getSyncPayload()` の `{ version: 1, tasks, categories, deleted, savedAt }`。push は常に全体上書き。
-- OAuth スコープ: `calendar.events` に加えて `https://www.googleapis.com/auth/drive.appdata`（gcal.js の SCOPE、空白区切り）。
+- OAuth スコープ: `calendar.events` に加えて `https://www.googleapis.com/auth/drive.appdata` と `https://www.googleapis.com/auth/drive.file`（gcal.js の SCOPE、空白区切り。drive.file はショートカット連携用）。
 - データモデル拡張（store.js）:
   - `Task.updatedAt: string`（ISO）。addTask / updateTask / toggleDone / カテゴリ変更などの更新で必ず現在時刻にする。欠けていれば normalizeTask が createdAt で補う。
   - `Category.updatedAt: string`（ISO）。addCategory / updateCategory で更新。
@@ -262,3 +262,18 @@ export async function importDriveInbox(store, apiFetch)          // → 取り�
 - 呼び出し（app.js）: 起動時（store.subscribe 後、sync.start 前）、`visibilitychange`（visible）、`storage` イベント（キー一致時）で端末内を取り込む。Drive 分は `createSync` の `afterPull` で同期のたびに取り込む（pull 後なので他端末で削除済みのトゥームストーンも反映済み）。
 - 取り込み件数が 1 以上なら「議事録から N 件のタスクを取り込みました」をトースト表示。取り込んだタスクのカレンダー登録確認は出さない。
 - タスク行: memo があればタイトル下に表示（タップで編集ポップオーバー）。memo が無ければメタ行の「メモ」ボタンから追加。ポップオーバーは textarea ＋「保存」（Ctrl/Cmd+Enter でも保存）。
+
+## ショートカット連携：未完了タスクの書き出し（js/bridge.js）
+- 目的: iPad の「ファイル」アプリ／ショートカットから未完了タスクを読めるようにする（元指示書 `SPEC_ショートカット連携.md` の 4.1）。
+- 保存先: マイドライブ直下のフォルダ `taskapp-bridge/`（`drive.file` スコープで taskapp 自身が作成。drive.file は自分が作ったファイルしか見えないため、フォルダ・ファイルは必ず taskapp が作る）。
+  - `tasks_open.json`: `{ version: 1, exportedAt: ローカル時刻ISO(+09:00), tasks: [{ id, title, due, time, priority, category: カテゴリ名|'' , note: memo }] }`
+  - `tasks_open.txt`: 1行目「taskapp 未完了タスク（M/D HH:MM 時点）」、以降【期限切れ】【今日 M/D】【今週】【それ以降・期限なし】の区分で「・M/D タイトル」。今日は日付なし、時刻があれば先頭に HH:MM、優先度高は末尾に（高）。空の区分は出さず、0件なら「未完了のタスクはありません」。
+  - `inbox.txt`: 無ければ空ファイルを作成するだけ（取り込みは 4.2 で実装）。既存の内容は上書きしない。
+- 並び順: 期限昇順（期限なしは最後）→ 時刻（なしは後）→ 優先度。「今週」は明日〜今週日曜（`endOfWeekYMD`）。
+```js
+export function buildOpenJSON(tasks, categories, now = new Date())
+export function buildOpenText(tasks, now = new Date())
+export function createBridge({ store, apiFetch, now }) // → { exportNow(): Promise<boolean> }（書き込んだら true）
+```
+- exportNow: 前回書き出した内容（時点行と exportedAt を除く）と同じなら何もしない。フォルダは `name='taskapp-bridge' and mimeType=folder and 'root' in parents and trashed=false` で検索し、無ければ作成。既存ファイルは `PATCH upload/...?uploadType=media` で上書き（ファイルIDを維持）、無ければ multipart で作成。実行中の再要求は1回にまとめて後追い実行。
+- 呼び出し（app.js）: 同期状態が `synced` になるたび（＝起動時・タスク変更後・画面表示時・手動同期の後）に `exportNow()`。失敗は console.error ＋初回のみトースト（403 は権限不足として再サインインを案内）。

@@ -13,6 +13,7 @@ import { gcal, authorizedFetch } from './gcal.js';
 import { drive } from './drive.js';
 import { createSync } from './sync.js';
 import { importLocalInbox, importDriveInbox, LOCAL_INBOX_KEY } from './inbox.js';
+import { createBridge } from './bridge.js';
 
 const PRIORITY_LABEL = { high: '高', mid: '中', low: '低' };
 const PRIORITY_ORDER = { high: 0, mid: 1, low: 2 };
@@ -60,9 +61,11 @@ const ui = {
   listening: false,
   micGranted: false,
   lastSyncErrorToast: '',
+  bridgeErrorShown: false,
 };
 
 let sync = null;
+const bridge = createBridge({ store, apiFetch: authorizedFetch });
 
 function today() {
   return todayYMD();
@@ -1028,7 +1031,24 @@ function onSyncStatus(status) {
     ui.lastSyncErrorToast = status.message;
     showToast(`データ同期に失敗しました: ${status.message}`, { error: true });
   }
-  if (status.state === 'synced') ui.lastSyncErrorToast = '';
+  if (status.state === 'synced') {
+    ui.lastSyncErrorToast = '';
+    runBridgeExport();
+  }
+}
+
+async function runBridgeExport() {
+  try {
+    await bridge.exportNow();
+  } catch (err) {
+    console.error(err);
+    if (ui.bridgeErrorShown) return;
+    ui.bridgeErrorShown = true;
+    const message = err?.status === 403
+      ? 'ショートカット連携用ファイルを書き出せません。設定画面で一度サインアウトし、再度サインインしてドライブへのアクセスを許可してください'
+      : `ショートカット連携用ファイルの書き出しに失敗しました: ${errorMessage(err)}`;
+    showToast(message, { error: true });
+  }
 }
 
 async function syncNow() {
