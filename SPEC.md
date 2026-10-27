@@ -268,7 +268,7 @@ export async function importDriveInbox(store, apiFetch)          // → 取り�
 - 保存先: マイドライブ直下のフォルダ `taskapp-bridge/`（`drive.file` スコープで taskapp 自身が作成。drive.file は自分が作ったファイルしか見えないため、フォルダ・ファイルは必ず taskapp が作る）。
   - `tasks_open.json`: `{ version: 1, exportedAt: ローカル時刻ISO(+09:00), tasks: [{ id, title, due, time, priority, category: カテゴリ名|'' , note: memo }] }`
   - `tasks_open.txt`: 1行目「taskapp 未完了タスク（M/D HH:MM 時点）」、以降【期限切れ】【今日 M/D】【今週】【それ以降・期限なし】の区分で「・M/D タイトル」。今日は日付なし、時刻があれば先頭に HH:MM、優先度高は末尾に（高）。空の区分は出さず、0件なら「未完了のタスクはありません」。
-  - `inbox.txt`: 無ければ空ファイルを作成するだけ（取り込みは 4.2 で実装）。既存の内容は上書きしない。
+  - `inbox.txt`: 無ければ空ファイルを作成するだけ。既存の内容は上書きしない。※ iPad のショートカットからドライブ上のファイルへ追記・上書きできないことを実機で確認したため（2026-10-27）、取り込みには使っていない。ショートカットからの登録はクリップボード方式（下記）。
 - 並び順: 期限昇順（期限なしは最後）→ 時刻（なしは後）→ 優先度。「今週」は明日〜今週日曜（`endOfWeekYMD`）。
 ```js
 export function buildOpenJSON(tasks, categories, now = new Date())
@@ -277,3 +277,15 @@ export function createBridge({ store, apiFetch, now }) // → { exportNow(): Pro
 ```
 - exportNow: 前回書き出した内容（時点行と exportedAt を除く）と同じなら何もしない。フォルダは `name='taskapp-bridge' and mimeType=folder and 'root' in parents and trashed=false` で検索し、無ければ作成。既存ファイルは `PATCH upload/...?uploadType=media` で上書き（ファイルIDを維持）、無ければ multipart で作成。実行中の再要求は1回にまとめて後追い実行。
 - 呼び出し（app.js）: 同期状態が `synced` になるたび（＝起動時・タスク変更後・画面表示時・手動同期の後）に `exportNow()`。失敗は console.error ＋初回のみトースト（403 は権限不足として再サインインを案内）。
+
+## ショートカット連携：貼り付けて取り込み（js/inbox.js の parsePasted / importPastedItems）
+- 目的: ショートカット（音声→Claude→JSON）や議事録の Claude 出力をクリップボード経由で taskapp に登録する（元指示書の 4.2 の取り込み規則＋4.3）。
+- UI: ヘッダーの「貼り付けて取り込み」ボタン `#paste-btn`。`navigator.clipboard.readText()` で読み、読めない・空なら `#paste-dialog`（textarea に手で貼り付け→「取り込む」）を開く。
+```js
+export function parsePasted(text, today)            // → { kind: 'json'|'text'|'empty', items, invalid }
+export function importPastedItems(store, items, today) // → { imported, duplicates }
+```
+- JSON として扱う入力（先頭が `{` か `[`。```json の囲みは外す）: inbox 形式 `{ version, items: [...] }`、`{ tasks: [...] }`、配列、1件のオブジェクト、1行1件の JSON Lines。title が空でない項目のみ取り込み、それ以外は invalid として数えてトースト表示（他の項目は取り込む）。
+- 項目: `{ id?, title, due?: YMD, time?: HH:MM, priority?: high|mid|low（高/中/低 も可）, note?|memo?, category?: カテゴリ名, categoryId?, repeat?, source? }`。不正な due/time は null、priority 不明は mid。id が無い項目は `paste-<今日>-<title|due のハッシュ>`（同じ日に同じ内容を貼っても二重登録しない）。
+- JSON でない文章: 1行1タスク（行頭の「・」「-」「1.」等は除く）。確認ダイアログ（`window.confirm`）で件数と先頭10件を見せ、OK なら各行を `parseTaskText` で解析（期限・優先度・カテゴリ等）。カテゴリ未指定は既定カテゴリ。
+- 取り込み規則は議事録 inbox と共通: 既存タスク・トゥームストーンと同じ id は取り込まない（duplicates）。結果トースト「貼り付けた内容から N 件のタスクを追加しました」／「貼り付けたタスクはすべて取り込み済みです」／「N 件は形式が正しくないためスキップしました」。

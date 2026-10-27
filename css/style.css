@@ -876,3 +876,48 @@ a {
     max-height: calc(100dvh - 32px);
   }
 }
+
+.paste-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin-left: auto;
+  margin-right: 4px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.paste-btn:hover,
+.paste-btn:focus-visible {
+  background: var(--surface-2);
+}
+
+.paste-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.paste-text {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.paste-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}

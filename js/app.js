@@ -12,7 +12,7 @@ import { isVoiceSupported, createRecognizer } from './voice.js';
 import { gcal, authorizedFetch } from './gcal.js';
 import { drive } from './drive.js';
 import { createSync } from './sync.js';
-import { importLocalInbox, importDriveInbox, LOCAL_INBOX_KEY } from './inbox.js';
+import { importLocalInbox, importDriveInbox, LOCAL_INBOX_KEY, parsePasted, importPastedItems } from './inbox.js';
 import { createBridge } from './bridge.js';
 
 const PRIORITY_LABEL = { high: '高', mid: '中', low: '低' };
@@ -33,6 +33,9 @@ const el = {
   popover: document.getElementById('popover'),
   scrim: document.getElementById('scrim'),
   settingsBtn: document.getElementById('settings-btn'),
+  pasteBtn: document.getElementById('paste-btn'),
+  pasteDialog: document.getElementById('paste-dialog'),
+  pasteText: document.getElementById('paste-text'),
   settings: document.getElementById('settings-dialog'),
   categoryList: document.getElementById('category-list'),
   addCategoryBtn: document.getElementById('add-category-btn'),
@@ -1218,6 +1221,11 @@ function bindEvents() {
     });
   }
 
+  el.pasteBtn.addEventListener('click', pasteFromClipboard);
+  el.pasteDialog.addEventListener('close', () => {
+    if (el.pasteDialog.returnValue === 'import') importPasted(el.pasteText.value);
+  });
+
   el.exportBtn.addEventListener('click', downloadJSON);
   el.importBtn.addEventListener('click', () => el.importFile.click());
   el.importFile.addEventListener('change', () => importFromFile(el.importFile.files[0]));
@@ -1265,6 +1273,63 @@ function runLocalInbox() {
 
 async function runDriveInbox() {
   notifyImported(await importDriveInbox(store, authorizedFetch));
+}
+
+function importPasted(text) {
+  const base = today();
+  const parsed = parsePasted(text, base);
+  if (parsed.kind === 'empty') {
+    showToast('貼り付ける内容がありません。先にショートカットなどでコピーしてください', { error: true });
+    return;
+  }
+  let { items } = parsed;
+  if (parsed.kind === 'text') {
+    const preview = items.slice(0, 10).map((i) => `・${i.title}`).join('\n');
+    const more = items.length > 10 ? `\n…ほか ${items.length - 10} 件` : '';
+    if (!window.confirm(`次の ${items.length} 件をタスクとして追加しますか？\n\n${preview}${more}`)) return;
+    const categories = store.getCategories();
+    items = items.map(({ title }) => {
+      try {
+        const p = parseTaskText(title, { categories, today: base });
+        return {
+          title: p.title.trim() || title,
+          due: p.due,
+          time: p.time,
+          priority: p.priority,
+          repeat: p.repeat,
+          categoryId: p.categoryId ?? store.getSettings().defaultCategoryId ?? null,
+          source: 'paste',
+        };
+      } catch (err) {
+        console.error(err);
+        return { title, source: 'paste' };
+      }
+    });
+  }
+  const { imported, duplicates } = importPastedItems(store, items, base);
+  if (imported > 0) showToast(`貼り付けた内容から ${imported} 件のタスクを追加しました`);
+  else if (duplicates > 0) showToast('貼り付けたタスクはすべて取り込み済みです');
+  if (parsed.invalid > 0) {
+    showToast(`${parsed.invalid} 件は形式が正しくないためスキップしました`, { error: true });
+  } else if (imported === 0 && duplicates === 0) {
+    showToast('取り込めるタスクが見つかりませんでした', { error: true });
+  }
+}
+
+async function pasteFromClipboard() {
+  let text = null;
+  try {
+    if (navigator.clipboard?.readText) text = await navigator.clipboard.readText();
+  } catch (err) {
+    console.error(err);
+  }
+  if (typeof text === 'string' && text.trim() !== '') {
+    importPasted(text);
+    return;
+  }
+  el.pasteText.value = '';
+  el.pasteDialog.returnValue = '';
+  el.pasteDialog.showModal();
 }
 
 function init() {
